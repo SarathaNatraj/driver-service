@@ -1,17 +1,28 @@
-# Use the official OpenJDK image as a base image
-FROM openjdk:17-jdk-alpine
+# Stage 1: Build the application
+FROM maven:3.8.1-jdk-11 AS builder
 
-# Add a volume pointing to /tmp
-VOLUME /tmp
+# Set the working directory inside the container
+WORKDIR /app
 
-# Make port 8090 available to the world outside this container
-EXPOSE 8090
+# Copy the pom.xml and download dependencies
+COPY pom.xml .
+RUN mvn dependency:go-offline -B
 
-# The application's jar file
-ARG JAR_FILE=target/demo-0.0.1-SNAPSHOT.jar
+# Copy the rest of the application source code and build the application
+COPY src ./src
+RUN mvn clean package -DskipTests
 
-# Add the application's jar to the container
-ADD ${JAR_FILE} app.jar
+# Stage 2: Create the runtime image
+FROM openjdk:11-jre-slim
 
-# Run the jar file
-ENTRYPOINT ["java","-jar","/app.jar"]
+# Set the working directory inside the container
+WORKDIR /app
+
+# Copy the built jar file from the build stage
+COPY --from=builder /app/target/*.jar app.jar
+
+# Expose the application port
+EXPOSE 8080
+
+# Define the entrypoint to run the application
+ENTRYPOINT ["java", "-jar", "app.jar"]
